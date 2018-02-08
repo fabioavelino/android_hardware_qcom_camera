@@ -1585,7 +1585,8 @@ int32_t QCamera3ProcessingChannel::translateStreamTypeAndFormat(camera3_stream_t
         case HAL_PIXEL_FORMAT_RAW16:
         case HAL_PIXEL_FORMAT_RAW10:
             streamType = CAM_STREAM_TYPE_RAW;
-            streamFormat = CAM_FORMAT_BAYER_IDEAL_RAW_MIPI_10BPP_GBRG;
+            /* Need to use the working format, which is the same that the one used by Camera1 API */
+            streamFormat = CAM_FORMAT_BAYER_IDEAL_RAW_QCOM_10BPP_GBRG;
             break;
         case HAL_PIXEL_FORMAT_RAW8:
             streamType = CAM_STREAM_TYPE_RAW;
@@ -2439,11 +2440,8 @@ void QCamera3RawChannel::streamCbRoutine(
     if (mIsRaw16) {
         cam_format_t streamFormat = getStreamDefaultFormat(CAM_STREAM_TYPE_RAW,
                 mCamera3Stream->width, mCamera3Stream->height);
-        if (streamFormat >= CAM_FORMAT_BAYER_MIPI_RAW_10BPP_GBRG &&
-            streamFormat <= CAM_FORMAT_BAYER_MIPI_RAW_10BPP_BGGR)
-            convertMipiToRaw16(super_frame->bufs[0]);
-        else
-            convertLegacyToRaw16(super_frame->bufs[0]);
+        /* For working solution, you need to call "convertLegacyToRaw16"  */
+        convertLegacyToRaw16(super_frame->bufs[0]);
     }
 
     //Make sure cache coherence because extra processing is done
@@ -2502,26 +2500,11 @@ void QCamera3RawChannel::convertLegacyToRaw16(mm_camera_buf_def_t *frame)
       memset(&offset, 0, sizeof(cam_frame_len_offset_t));
       stream->getFrameOffset(offset);
 
-      uint32_t raw16_stride = ((uint32_t)dim.width + 15U) & ~15U;
-      uint16_t* raw16_buffer = (uint16_t *)frame->buffer;
-
-      // In-place format conversion.
-      // Raw16 format always occupy more memory than opaque raw10.
-      // Convert to Raw16 by iterating through all pixels from bottom-right
-      // to top-left of the image.
-      // One special notes:
-      // 1. Cross-platform raw16's stride is 16 pixels.
-      // 2. Opaque raw10's stride is 6 pixels, and aligned to 16 bytes.
-      for (int32_t ys = dim.height - 1; ys >= 0; ys--) {
-          uint32_t y = (uint32_t)ys;
-          uint64_t* row_start = (uint64_t *)frame->buffer +
-                  y * (uint32_t)offset.mp[0].stride_in_bytes / 8;
-          for (int32_t xs = dim.width - 1; xs >= 0; xs--) {
-              uint32_t x = (uint32_t)xs;
-              uint16_t raw16_pixel = 0x3FF & (row_start[x/6] >> (10*(x%6)));
-              raw16_buffer[y*raw16_stride+x] = raw16_pixel;
-          }
-      }
+      /*
+      ** Oneplus, you need to insert here the same convert algorithm used in 
+      ** the method "sendDngImageCallback".
+      ** That's why final RAW pictures was greenish !
+      */
   } else {
       LOGE("Could not find stream");
   }
